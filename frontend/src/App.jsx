@@ -234,13 +234,22 @@ const styles = `
     border: none;
     color: #475569;
     cursor: pointer;
-    margin-left: 12px;
+    margin-left: 8px;
     font-size: 0.8rem;
     font-weight: 600;
+    transition: 0.2s ease;
   }
 
   .action-btn:hover {
     color: #ffffff;
+  }
+
+  .action-btn.delete:hover {
+    color: #ef4444;
+  }
+
+  .action-btn.edit:hover {
+    color: #3b82f6;
   }
 
   .empty-state {
@@ -261,6 +270,77 @@ const styles = `
     margin-bottom: 16px;
   }
 
+  /* Modal Styles */
+  .modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.7);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+  }
+
+  .modal-content {
+    background: #0f1219;
+    border: 1px solid #1e2530;
+    border-radius: 16px;
+    padding: 32px;
+    max-width: 500px;
+    width: 90%;
+    max-height: 90vh;
+    overflow-y: auto;
+  }
+
+  .modal-title {
+    font-size: 1.3rem;
+    font-weight: 700;
+    margin-bottom: 24px;
+    color: #ffffff;
+  }
+
+  .modal-buttons {
+    display: flex;
+    gap: 12px;
+    margin-top: 24px;
+  }
+
+  .btn-save {
+    flex: 1;
+    padding: 12px;
+    border-radius: 8px;
+    border: none;
+    background: #3b82f6;
+    color: #ffffff;
+    font-weight: 700;
+    cursor: pointer;
+    transition: 0.2s ease;
+  }
+
+  .btn-save:hover {
+    background: #2563eb;
+  }
+
+  .btn-cancel {
+    flex: 1;
+    padding: 12px;
+    border-radius: 8px;
+    border: 1px solid #334155;
+    background: transparent;
+    color: #e2e8f0;
+    font-weight: 700;
+    cursor: pointer;
+    transition: 0.2s ease;
+  }
+
+  .btn-cancel:hover {
+    border-color: #64748b;
+    color: #ffffff;
+  }
+
   @media (max-width: 900px) {
     .stats-row,
     .main-grid {
@@ -275,8 +355,17 @@ export default function App() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [filter, setFilter] = useState("All");
+  const [editingId, setEditingId] = useState(null);
 
   const [form, setForm] = useState({
+    title: "",
+    amount: "",
+    category: "Food",
+    date: "",
+    note: "",
+  });
+
+  const [editForm, setEditForm] = useState({
     title: "",
     amount: "",
     category: "Food",
@@ -309,6 +398,9 @@ export default function App() {
 
   const handleChange = (e) =>
     setForm({ ...form, [e.target.name]: e.target.value });
+
+  const handleEditChange = (e) =>
+    setEditForm({ ...editForm, [e.target.name]: e.target.value });
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -360,7 +452,81 @@ export default function App() {
     }
   };
 
-  // Fixed handleDelete to include category as query param for Cosmos DB
+  const handleEditSubmit = async (e) => {
+    e.preventDefault();
+
+    const cleanTitle = editForm.title.trim();
+    const cleanNote = editForm.note.trim();
+    const cleanAmount = Number(editForm.amount);
+
+    if (!cleanTitle || !cleanAmount || cleanAmount <= 0 || !editForm.date) {
+      alert("Please fill in all required fields correctly.");
+      return;
+    }
+
+    try {
+      setSubmitting(true);
+
+      const expense = expenses.find((ex) => ex.id === editingId);
+
+      const response = await fetch(`/api/expenses/${editingId}?category=${encodeURIComponent(expense.category)}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          title: cleanTitle,
+          amount: cleanAmount,
+          category: editForm.category,
+          date: editForm.date,
+          note: cleanNote
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to update expense.");
+      }
+
+      const updated = await response.json();
+      setExpenses(expenses.map((e) => (e.id === editingId ? updated : e)));
+
+      setEditingId(null);
+      setEditForm({
+        title: "",
+        amount: "",
+        category: "Food",
+        date: "",
+        note: "",
+      });
+    } catch (err) {
+      alert("Could not update expense.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleEdit = (expense) => {
+    setEditingId(expense.id);
+    setEditForm({
+      title: expense.title,
+      amount: String(expense.amount),
+      category: expense.category,
+      date: expense.date,
+      note: expense.note,
+    });
+  };
+
+  const handleCancelEdit = () => {
+    setEditingId(null);
+    setEditForm({
+      title: "",
+      amount: "",
+      category: "Food",
+      date: "",
+      note: "",
+    });
+  };
+
   const handleDelete = async (expense) => {
     try {
       const response = await fetch(`/api/expenses/${expense.id}?category=${encodeURIComponent(expense.category)}`, {
@@ -523,9 +689,16 @@ export default function App() {
                     </div>
 
                     <button
-                      className="action-btn"
+                      className="action-btn edit"
+                      onClick={() => handleEdit(e)}
+                      type="button"
+                    >
+                      EDIT
+                    </button>
+
+                    <button
+                      className="action-btn delete"
                       onClick={() => handleDelete(e)}
-                      style={{ color: "#ef4444" }}
                       type="button"
                     >
                       DELETE
@@ -536,6 +709,72 @@ export default function App() {
           </div>
         </div>
       </div>
+
+      {editingId && (
+        <div className="modal-overlay" onClick={handleCancelEdit}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-title">Edit Expense</div>
+
+            <div className="cat-grid">
+              {CATEGORIES.map((cat) => (
+                <button
+                  key={cat}
+                  type="button"
+                  className={`cat-pill${editForm.category === cat ? " active" : ""}`}
+                  onClick={() => setEditForm({ ...editForm, category: cat })}
+                >
+                  {cat}
+                </button>
+              ))}
+            </div>
+
+            <form onSubmit={handleEditSubmit}>
+              <input
+                className="form-input"
+                name="title"
+                placeholder="Title"
+                value={editForm.title}
+                onChange={handleEditChange}
+              />
+
+              <input
+                className="form-input"
+                type="number"
+                name="amount"
+                placeholder="Amount"
+                value={editForm.amount}
+                onChange={handleEditChange}
+              />
+
+              <input
+                className="form-input"
+                type="date"
+                name="date"
+                value={editForm.date}
+                onChange={handleEditChange}
+              />
+
+              <textarea
+                className="form-input"
+                name="note"
+                placeholder="Optional note"
+                value={editForm.note}
+                onChange={handleEditChange}
+                rows="3"
+              />
+
+              <div className="modal-buttons">
+                <button className="btn-save" type="submit" disabled={submitting}>
+                  {submitting ? "Saving..." : "Save Changes"}
+                </button>
+                <button className="btn-cancel" type="button" onClick={handleCancelEdit}>
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </>
   );
 }

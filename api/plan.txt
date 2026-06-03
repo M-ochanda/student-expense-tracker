@@ -1,0 +1,8 @@
+Planned API routes
+
+POST /api/expenses
+GET /api/expenses
+GET /api/expenses/{id}
+PUT /api/expenses/{id}
+DELETE /api/expenses/{id}
+GET /api/summary
